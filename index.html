@@ -40,19 +40,24 @@
   <div id="status" role="status" aria-live="polite"></div>
 
   <p class="hint">
-    Abrir en HTTPS (Render) y, si alguna vez se denegó el permiso, permitir Cámara desde el icono de candado y recargar [web:231][web:202].
+    Usar HTTPS (Render) y, si no aparece el prompt, permitir Cámara en el icono de candado y recargar; los navegadores móviles requieren contexto seguro y a veces una interacción para autoplay del video [web:202][web:231].
   </p>
 
-  <!-- ZXing UMD (constantes) y ZXing Browser (lector) -->
+  <!-- Usar versiones fijas para evitar incompatibilidades de bundle -->
   <script src="https://unpkg.com/@zxing/library@0.19.2/umd/index.min.js"></script>
-  <script src="https://unpkg.com/@zxing/browser@latest"></script>
+  <script src="https://unpkg.com/@zxing/browser@0.1.5"></script>
 
   <script>
   (function () {
-    var BrowserMultiFormatReader = ZXingBrowser.BrowserMultiFormatReader;
-    var NotFoundException = ZXingBrowser.NotFoundException;
-    var DecodeHintType = ZXing.DecodeHintType;
-    var BarcodeFormat = ZXing.BarcodeFormat;
+    var ZXBrowser = window.ZXingBrowser || {};
+    var ZXLib = window.ZXing || {};
+
+    var BrowserMultiFormatReader = ZXBrowser.BrowserMultiFormatReader;
+    var DecodeHintType = ZXLib.DecodeHintType;
+    var BarcodeFormat = ZXLib.BarcodeFormat;
+
+    // Si NotFoundException no existe en este build, evitamos instanceof y usamos nombre
+    var NotFoundName = 'NotFoundException';
 
     var video = document.getElementById('preview');
     var cameraSelect = document.getElementById('cameraSelect');
@@ -64,40 +69,30 @@
 
     function logStatus(msg) { statusEl.textContent = msg; }
 
-    // Autoplay fixes
+    // Autoplay móvil
     function tryPlay() { video.play().catch(function () {}); }
     video.addEventListener('loadedmetadata', tryPlay, { once: true });
     video.addEventListener('canplay', tryPlay, { once: true });
-    video.setAttribute('autoplay', '');
-    video.setAttribute('muted', '');
-    video.setAttribute('playsinline', '');
+    video.setAttribute('autoplay',''); video.setAttribute('muted',''); video.setAttribute('playsinline','');
 
     // Beep y vibración
     var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function beep() {
       try {
-        var o = audioCtx.createOscillator();
-        var g = audioCtx.createGain();
-        o.type = 'square';
-        o.frequency.value = 880;
-        o.connect(g);
-        g.connect(audioCtx.destination);
-        g.gain.value = 0.25;
-        o.start();
-        o.stop(audioCtx.currentTime + 0.12);
-      } catch (e) {}
+        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type='square'; o.frequency.value=880; o.connect(g); g.connect(audioCtx.destination);
+        g.gain.value=0.25; o.start(); o.stop(audioCtx.currentTime+0.12);
+      } catch {}
     }
-    function vibrar(ms) {
-      if (ms === void 0) { ms = 80; }
-      if (navigator.vibrate) navigator.vibrate(ms);
-    }
+    function vibrar(ms){ if (ms===void 0) ms=80; if (navigator.vibrate) navigator.vibrate(ms); }
 
-    // Hints EAN-13/Code128
+    // Hints: EAN-13 y Code128
     var hints = new Map();
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.CODE_128]);
+    if (DecodeHintType && BarcodeFormat) {
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.CODE_128]);
+    }
 
     var reader = new BrowserMultiFormatReader(hints);
-
     var running = false;
     var activeControls = null;
     var currentDeviceId = null;
@@ -107,53 +102,49 @@
         if (activeControls && activeControls.stream) {
           activeControls.stream.getTracks().forEach(function (t) { t.stop(); });
         }
-      } catch (e) {}
+      } catch {}
     }
 
     function requestPermission() {
       logStatus('Solicitando permiso de cámara...');
       return navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-        .then(function (tmp) {
-          tmp.getTracks().forEach(function (t) { t.stop(); });
-          logStatus('Permiso concedido.');
-          return true;
-        })
-        .catch(function (e) {
-          logStatus('Permiso no concedido: ' + (e && e.name ? e.name : e));
-          return false;
-        });
+        .then(function (tmp) { tmp.getTracks().forEach(function (t){t.stop();}); logStatus('Permiso concedido.'); return true; })
+        .catch(function (e) { logStatus('Permiso no concedido: ' + (e && e.name ? e.name : e)); return false; });
     }
 
     function listCameras() {
       return BrowserMultiFormatReader.listVideoInputDevices().then(function (devices) {
         cameraSelect.innerHTML = '';
-        devices.forEach(function (d, i) {
+        devices.forEach(function (d,i){
           var opt = document.createElement('option');
           opt.value = d.deviceId;
-          opt.textContent = d.label || ('Cámara ' + (i + 1));
+          opt.textContent = d.label || ('Cámara ' + (i+1));
           cameraSelect.appendChild(opt);
         });
         var opts = Array.prototype.slice.call(cameraSelect.options);
-        var back = opts.find(function (o) {
-          return /back|rear|environment/i.test(o.textContent);
-        });
+        var back = opts.find(function (o){ return /back|rear|environment/i.test(o.textContent); });
         if (back) cameraSelect.value = back.value;
         currentDeviceId = cameraSelect.value || (devices[0] && devices[0].deviceId) || null;
         return devices;
       });
     }
 
-    function setUIOnStart(){ startBtn.disabled = true; resumeBtn.disabled = true; stopBtn.disabled = false; }
-    function setUIOnStop(){ startBtn.disabled = false; resumeBtn.disabled = true; stopBtn.disabled = true; }
-    function setUIOnPaused(){ startBtn.disabled = true; resumeBtn.disabled = false; stopBtn.disabled = false; }
+    function setUIOnStart(){ startBtn.disabled=true; resumeBtn.disabled=true; stopBtn.disabled=false; }
+    function setUIOnStop(){ startBtn.disabled=false; resumeBtn.disabled=true; stopBtn.disabled=true; }
+    function setUIOnPaused(){ startBtn.disabled=true; resumeBtn.disabled=false; stopBtn.disabled=false; }
 
-    function onResult(text, controls) {
+    function isNotFoundError(err) {
+      // Evitar instanceof cuando la clase no está disponible; comparar por nombre
+      return err && (err.name === NotFoundName || String(err).indexOf(NotFoundName) !== -1);
+    }
+
+    function onResult(text, controls){
       codeText.textContent = text;
-      try { audioCtx.resume && audioCtx.resume(); } catch (e) {}
+      try { audioCtx.resume && audioCtx.resume(); } catch {}
       beep(); vibrar();
-      try { controls && controls.stop(); } catch (e) {}
+      try { controls && controls.stop(); } catch {}
       activeControls = controls;
-      running = false; setUIOnPaused();
+      running=false; setUIOnPaused();
       logStatus('Código detectado. Escaneo en pausa.');
     }
 
@@ -161,12 +152,11 @@
       requestPermission().then(function (ok) {
         if (!ok) return;
 
-        try { reader.reset(); } catch (e) {}
+        try { reader.reset(); } catch {}
         stopActiveStream();
 
         listCameras().then(function (devices) {
           if (!devices.length) { logStatus('No hay cámaras disponibles.'); return; }
-
           running = true; setUIOnStart();
           logStatus('Iniciando cámara seleccionada...');
           reader.decodeFromVideoDevice(currentDeviceId, video, function (result, err, controls) {
@@ -174,7 +164,7 @@
             if (!running) return;
             if (result) {
               onResult(result.getText(), controls);
-            } else if (err && !(err instanceof NotFoundException)) {
+            } else if (err && !isNotFoundError(err)) {
               console.error(err);
               logStatus('Error de lectura: ' + (err.name || err));
             }
@@ -186,13 +176,13 @@
     }
 
     function stop() {
-      running = false;
-      try { reader.reset(); } catch (e) {}
+      running=false;
+      try { reader.reset(); } catch {}
       stopActiveStream();
       setUIOnStop();
       logStatus('Escaneo detenido.');
     }
-    function resume() { start(); }
+    function resume(){ start(); }
 
     cameraSelect.addEventListener('change', function () {
       currentDeviceId = cameraSelect.value;
@@ -202,7 +192,7 @@
     stopBtn.addEventListener('click', stop);
     resumeBtn.addEventListener('click', resume);
 
-    // Pre-listado (labels mejoran tras el primer permiso)
+    // Pre-listado
     listCameras().catch(function () {});
   })();
   </script>
