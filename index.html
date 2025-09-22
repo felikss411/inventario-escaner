@@ -40,10 +40,10 @@
   <div id="status" role="status" aria-live="polite"></div>
 
   <p class="hint">
-    Abrir en HTTPS (por ejemplo, Render) para que el navegador permita la cámara; usar la cámara trasera para mejor enfoque [web:102][web:6].
+    Abrir en HTTPS (Render) para permisos de cámara; si no se ve la imagen, reintentar con el selector o el botón Reanudar [web:102][web:202].
   </p>
 
-  <!-- Orden correcto: primero ZXing UMD (constantes), luego ZXing Browser (lector de video) -->
+  <!-- Orden correcto: ZXing UMD (constantes) -> ZXing Browser (video) -> app -->
   <script src="https://unpkg.com/@zxing/library@0.19.2/umd/index.min.js"></script>
   <script src="https://unpkg.com/@zxing/browser@latest"></script>
   <script src="index.js"></script>

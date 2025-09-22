@@ -1,11 +1,6 @@
 // index.js
 (() => {
-  const {
-    BrowserMultiFormatReader,
-    NotFoundException
-  } = ZXingBrowser;
-
-  // Constantes de hints desde ZXing UMD
+  const { BrowserMultiFormatReader, NotFoundException } = ZXingBrowser;
   const { DecodeHintType, BarcodeFormat } = ZXing;
 
   // DOM
@@ -17,7 +12,18 @@
   const codeText = document.getElementById('codeText');
   const statusEl = document.getElementById('status');
 
-  // Beep con Web Audio API
+  // Fix autoplay móviles
+  function attachAutoPlayFix(videoEl) {
+    const tryPlay = () => videoEl.play().catch(() => {});
+    videoEl.addEventListener('loadedmetadata', tryPlay, { once: true });
+    videoEl.addEventListener('canplay', tryPlay, { once: true });
+  }
+  attachAutoPlayFix(video);
+  video.setAttribute('autoplay', '');
+  video.setAttribute('muted', '');
+  video.setAttribute('playsinline', '');
+
+  // Beep y vibración
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   function beep(freq = 880, duration = 120, volume = 0.25) {
     try {
@@ -32,12 +38,11 @@
       osc.stop(audioCtx.currentTime + duration / 1000);
     } catch (e) {}
   }
-
   function vibrar(ms = 80) {
     if (navigator.vibrate) navigator.vibrate(ms);
   }
 
-  // Hints: limitar a EAN-13 y Code128
+  // Hints: EAN-13 y Code128
   const hints = new Map();
   hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.CODE_128]);
 
@@ -45,6 +50,15 @@
 
   let currentDeviceId = null;
   let running = false;
+  let activeControls = null;
+
+  async function stopActiveStream() {
+    try {
+      if (activeControls && activeControls.stream) {
+        activeControls.stream.getTracks().forEach(t => t.stop());
+      }
+    } catch (e) {}
+  }
 
   async function primePermissions() {
     statusEl.textContent = 'Solicitando permiso de cámara...';
@@ -62,7 +76,6 @@
       opt.textContent = d.label || `Cámara ${idx + 1}`;
       cameraSelect.appendChild(opt);
     });
-    // Priorizar trasera por etiqueta si existe
     const back = Array.from(cameraSelect.options).find(o =>
       /back|rear|environment/i.test(o.textContent)
     );
@@ -86,12 +99,15 @@
     stopBtn.disabled = false;
   }
 
-  function onResultCommon(text, controls) {
+  function onResult(text, controls) {
     codeText.textContent = text;
     try { audioCtx.resume && audioCtx.resume(); } catch (_) {}
     beep();
     vibrar();
-    controls.stop();
+    if (controls) {
+      activeControls = controls;
+      try { controls.stop(); } catch (_) {}
+    }
     running = false;
     setUIOnPaused();
     statusEl.textContent = 'Código detectado. Escaneo en pausa.';
@@ -99,76 +115,97 @@
 
   async function start() {
     try {
-      await primePermissions(); // fuerza prompt dentro del click
+      await primePermissions();
     } catch (e) {
       statusEl.textContent = `Permiso denegado: ${e && e.name ? e.name : e}`;
       return;
     }
 
-    try {
-      statusEl.textContent = 'Iniciando cámara trasera...';
-      const constraints = { audio: false, video: { facingMode: { exact: 'environment' } } };
+    await stopActiveStream();
+    try { reader.reset(); } catch (_) {}
 
-      reader.decodeFromConstraints(constraints, video, (result, err, controls) => {
-        if (!running && result) return; // evitar carreras
+    // Intento 1: trasera exacta
+    try {
+      statusEl.textContent = 'Abriendo cámara (trasera exact)...';
+      running = true;
+      setUIOnStart();
+
+      await reader.decodeFromConstraints(
+        { audio: false, video: { facingMode: { exact: 'environment' } } },
+        video,
+        (result, err, controls) => {
+          activeControls = controls;
+          if (!running) return;
+          if (result) {
+            onResult(result.getText(), controls);
+          } else if (err && !(err instanceof NotFoundException)) {
+            console.error(err);
+            statusEl.textContent = `Error de lectura: ${err.name || err}`;
+          }
+        }
+      );
+      return;
+    } catch (e1) {
+      statusEl.textContent = 'Cámara trasera (exact) no disponible. Probando alternativa...';
+    }
+
+    // Intento 2: trasera no estricta
+    try {
+      running = true;
+      setUIOnStart();
+
+      await reader.decodeFromConstraints(
+        { audio: false, video: { facingMode: 'environment' } },
+        video,
+        (result, err, controls) => {
+          activeControls = controls;
+          if (!running) return;
+          if (result) {
+            onResult(result.getText(), controls);
+          } else if (err && !(err instanceof NotFoundException)) {
+            console.error(err);
+            statusEl.textContent = `Error de lectura: ${err.name || err}`;
+          }
+        }
+      );
+      return;
+    } catch (e2) {
+      statusEl.textContent = 'No se pudo abrir por facingMode. Listando cámaras...';
+    }
+
+    // Intento 3: deviceId
+    try {
+      await populateCameras();
+      if (!currentDeviceId) throw new Error('Sin cámaras disponibles');
+      running = true;
+      setUIOnStart();
+
+      await reader.decodeFromVideoDevice(currentDeviceId, video, (result, err, controls) => {
+        activeControls = controls;
+        if (!running) return;
         if (result) {
-          onResultCommon(result.getText(), controls);
+          onResult(result.getText(), controls);
         } else if (err && !(err instanceof NotFoundException)) {
           console.error(err);
           statusEl.textContent = `Error de lectura: ${err.name || err}`;
         }
       });
-
-      setUIOnStart();
-      running = true;
-    } catch (e) {
-      statusEl.textContent = `No se pudo abrir trasera (exact). Probando métodos alternos...`;
-      // Fallback 1: facingMode no estricto
-      try {
-        const constraintsFallback = { audio: false, video: { facingMode: 'environment' } };
-        reader.decodeFromConstraints(constraintsFallback, video, (result, err, controls) => {
-          if (result) {
-            onResultCommon(result.getText(), controls);
-          } else if (err && !(err instanceof NotFoundException)) {
-            console.error(err);
-            statusEl.textContent = `Error de lectura: ${err.name || err}`;
-          }
-        });
-        setUIOnStart();
-        running = true;
-      } catch (e2) {
-        // Fallback 2: listar cámaras y usar deviceId
-        statusEl.textContent = 'Listando cámaras...';
-        try {
-          await populateCameras();
-          if (!currentDeviceId) throw new Error('Sin cámaras disponibles');
-          reader.decodeFromVideoDevice(currentDeviceId, video, (result, err, controls) => {
-            if (result) {
-              onResultCommon(result.getText(), controls);
-            } else if (err && !(err instanceof NotFoundException)) {
-              console.error(err);
-              statusEl.textContent = `Error de lectura: ${err.name || err}`;
-            }
-          });
-          setUIOnStart();
-          running = true;
-        } catch (e3) {
-          statusEl.textContent = `No se pudo iniciar la cámara: ${e3.name || e3}. Verifica HTTPS y permisos.`;
-          setUIOnStop();
-        }
-      }
+    } catch (e3) {
+      statusEl.textContent = `No se pudo iniciar la cámara: ${e3.name || e3}. Verifica permisos y que ninguna otra app use la cámara.`;
+      setUIOnStop();
     }
   }
 
   function stop() {
     running = false;
     try { reader.reset(); } catch (_) {}
+    stopActiveStream();
     setUIOnStop();
     statusEl.textContent = 'Escaneo detenido.';
   }
 
   async function resume() {
-    statusEl.textContent = 'Reanudando escaneo...';
+    statusEl.textContent = 'Reanudando...';
     return start();
   }
 
@@ -184,6 +221,6 @@
   stopBtn.addEventListener('click', stop);
   resumeBtn.addEventListener('click', resume);
 
-  // Pre-listado opcional (labels aparecen tras permisos)
+  // Pre-listado (labels aparecen mejor tras permisos)
   populateCameras().catch(console.error);
 })();
