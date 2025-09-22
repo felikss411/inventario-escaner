@@ -3,12 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Escáner Inventario</title>
+  <title>Escáner Inventario (EAN-13 / Code128)</title>
   <style>
-    body { font-family: sans-serif; margin: 16px; }
-    #preview { width: 100%; max-width: 480px; background: #000; }
-    .controls { margin: 8px 0; display: flex; gap: 8px; flex-wrap: wrap; }
-    #result { font-size: 1.1rem; margin-top: 8px; }
+    :root {
+      color-scheme: light dark;
+    }
+    body { font-family: system-ui, Arial, sans-serif; margin: 16px; line-height: 1.4; }
+    h1 { margin: 0 0 12px; font-size: 1.25rem; }
+    .controls { margin: 10px 0 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    select, button { padding: 8px; font-size: 1rem; }
+    #preview { width: 100%; max-width: 520px; background: #000; border-radius: 8px; }
+    #result { font-size: 1.1rem; margin-top: 10px; }
+    .hint { font-size: 0.9rem; opacity: 0.8; margin-top: 8px; max-width: 520px; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #eee; color: #333; font-size: 0.8rem; margin-right: 6px; }
   </style>
 </head>
 <body>
@@ -16,17 +23,28 @@
 
   <div class="controls">
     <label for="cameraSelect">Cámara:</label>
-    <select id="cameraSelect"></select>
+    <select id="cameraSelect" aria-label="Seleccionar cámara"></select>
     <button id="startBtn">Iniciar</button>
+    <button id="resumeBtn" disabled>Reanudar</button>
     <button id="stopBtn" disabled>Detener</button>
   </div>
 
-  <video id="preview" autoplay playsinline></video>
+  <video id="preview" autoplay playsinline muted></video>
 
-  <div id="result">Código: <span id="codeText">—</span></div>
+  <div id="result">
+    Formatos activos:
+    <span class="badge">EAN-13</span>
+    <span class="badge">Code128</span>
+    <div style="margin-top:6px">Código: <span id="codeText">—</span></div>
+  </div>
 
-  <!-- ZXing Browser (JS listo para usar en el navegador) -->
+  <p class="hint">
+    Recomendación: buena iluminación y usar la cámara trasera para mejor enfoque en productos. Si la trasera no aparece, elige otra cámara en el selector o intenta “Iniciar” nuevamente [HTTPS requerido] [web:6][web:90].
+  </p>
+
+  <!-- ZXing Browser desde CDN -->
   <script src="https://unpkg.com/@zxing/browser@latest"></script>
   <script src="index.js"></script>
 </body>
 </html>
+
