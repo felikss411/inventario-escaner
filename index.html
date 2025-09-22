@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Escáner Inventario</title>
+  <style>
+    body { font-family: sans-serif; margin: 16px; }
+    #preview { width: 100%; max-width: 480px; background: #000; }
+    .controls { margin: 8px 0; display: flex; gap: 8px; flex-wrap: wrap; }
+    #result { font-size: 1.1rem; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Escáner de Códigos</h1>
+
+  <div class="controls">
+    <label for="cameraSelect">Cámara:</label>
+    <select id="cameraSelect"></select>
+    <button id="startBtn">Iniciar</button>
+    <button id="stopBtn" disabled>Detener</button>
+  </div>
+
+  <video id="preview" autoplay playsinline></video>
+
+  <div id="result">Código: <span id="codeText">—</span></div>
+
+  <!-- ZXing Browser (JS listo para usar en el navegador) -->
+  <script src="https://unpkg.com/@zxing/browser@latest"></script>
+  <script src="index.js"></script>
+</body>
+</html>
