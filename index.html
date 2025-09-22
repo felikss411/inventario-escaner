@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Escáner Inventario (EAN-13 / Code128)</title>
   <style>
-    :root {
-      color-scheme: light dark;
-    }
+    :root { color-scheme: light dark; }
     body { font-family: system-ui, Arial, sans-serif; margin: 16px; line-height: 1.4; }
     h1 { margin: 0 0 12px; font-size: 1.25rem; }
     .controls { margin: 10px 0 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -16,6 +14,7 @@
     #result { font-size: 1.1rem; margin-top: 10px; }
     .hint { font-size: 0.9rem; opacity: 0.8; margin-top: 8px; max-width: 520px; }
     .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #eee; color: #333; font-size: 0.8rem; margin-right: 6px; }
+    #status { margin-top: 8px; min-height: 1.2em; font-size: 0.95rem; }
   </style>
 </head>
 <body>
@@ -38,13 +37,15 @@
     <div style="margin-top:6px">Código: <span id="codeText">—</span></div>
   </div>
 
+  <div id="status" role="status" aria-live="polite"></div>
+
   <p class="hint">
-    Recomendación: buena iluminación y usar la cámara trasera para mejor enfoque en productos. Si la trasera no aparece, elige otra cámara en el selector o intenta “Iniciar” nuevamente [HTTPS requerido] [web:6][web:90].
+    Abrir en HTTPS (por ejemplo, Render) para que el navegador permita la cámara; usar la cámara trasera para mejor enfoque [web:102][web:6].
   </p>
 
-  <!-- ZXing Browser desde CDN -->
+  <!-- Orden correcto: primero ZXing UMD (constantes), luego ZXing Browser (lector de video) -->
+  <script src="https://unpkg.com/@zxing/library@0.19.2/umd/index.min.js"></script>
   <script src="https://unpkg.com/@zxing/browser@latest"></script>
   <script src="index.js"></script>
 </body>
 </html>
-
